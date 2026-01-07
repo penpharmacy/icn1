@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>แบบประเมินการทำความสะอาดมือ – รพ.พุนพิน</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: 'Kanit', sans-serif; background:#f4f6f8; margin:0; padding:20px; }
+    h1,h2,h3 { margin-top:0 }
+    .card { background:#fff; border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 2px 6px rgba(0,0,0,.08)}
+    label { display:block; margin-top:8px }
+    select,input { padding:6px; margin-top:4px }
+    table { width:100%; border-collapse:collapse; margin-top:8px }
+    th,td { border:1px solid #ccc; padding:6px; text-align:center }
+    button { padding:10px 16px; border:none; border-radius:8px; background:#2563eb; color:#fff; cursor:pointer }
+    button.secondary { background:#16a34a }
+    button.warn { background:#dc2626 }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:12px }
+    .small { font-size:13px; color:#555 }
+  </style>
+</head>
+<body>
+<h1>📋 แบบประเมินการทำความสะอาดมือ<br><span class="small">โรงพยาบาลพุนพิน</span></h1>
+
+<div class="card">
+<h2>1. ข้อมูลทั่วไป</h2>
+<label>หอผู้ป่วย
+<select id="ward">
+  <option>OPD</option><option>IPD</option><option>LR</option><option>ER</option><option>อื่นๆ</option>
+</select></label>
+<label>วันที่ <input type="date" id="date"></label>
+<label>เวลา <input type="time" id="time"></label>
+</div>
+
+<div class="card">
+<h2>2. ความพร้อมใช้ของอุปกรณ์</h2>
+<div class="grid">
+<label>อ่างล้างมือ <select id="sink"><option>มี</option><option>ไม่มี</option></select></label>
+<label>สบู่เหลว <select id="soap"><option>มี</option><option>ไม่มี</option></select></label>
+<label>4% Chlorhexidine <select id="chx"><option>มี</option><option>ไม่มี</option></select></label>
+<label>Alcohol hand rub <select id="ahr"><option>มี</option><option>ไม่มี</option></select></label>
+<label>กระดาษเช็ดมือ <select id="towel"><option>มี</option><option>ไม่มี</option></select></label>
+<label>โปสเตอร์ล้างมือ <select id="poster"><option>มี</option><option>ไม่มี</option></select></label>
+<label>ถังขยะ <select id="bin"><option>มี</option><option>ไม่มี</option></select></label>
+</div>
+</div>
+
+<div class="card">
+<h2>3. การสังเกตพฤติกรรม</h2>
+<label>วิชาชีพ
+<select id="role">
+<option>แพทย์</option><option>พยาบาล</option><option>ผู้ช่วยเหลือคนไข้</option><option>นักศึกษาพยาบาล</option><option>อื่นๆ</option>
+</select></label>
+
+<table>
+<tr><th>โอกาส</th><th>ผลการปฏิบัติ</th></tr>
+<script>
+const moments=[
+'ก่อนสัมผัสผู้ป่วย','ก่อนทำหัตถการปลอดเชื้อ','หลังสัมผัสสารคัดหลั่ง','หลังสัมผัสผู้ป่วย','หลังสัมผัสสิ่งรอบตัวผู้ป่วย'
+];
+for(let i=0;i<moments.length;i++){
+ document.write(`<tr><td>${moments[i]}</td><td>
+ <select id="m${i}">
+ <option value="HW">HW</option>
+ <option value="HR">HR</option>
+ <option value="NO">ไม่ล้าง</option>
+ <option value="G">ใส่ถุงมือ</option>
+ </select></td></tr>`);
+}
+</script>
+</table>
+</div>
+
+<div class="card">
+<button onclick="saveData()">💾 บันทึกข้อมูล</button>
+<button class="secondary" onclick="showReport()">📊 แสดงรายงาน</button>
+<button class="warn" onclick="exportCSV()">⬇ Export Excel (CSV)</button>
+</div>
+
+<div class="card" id="report"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+function getAll(){ return JSON.parse(localStorage.getItem('hh_data')||'[]'); }
+function saveAll(d){ localStorage.setItem('hh_data',JSON.stringify(d)); }
+
+function saveData(){
+ let rec={
+ ward:ward.value,date:date.value,time:time.value,role:role.value,
+ equip:{sink:sink.value,soap:soap.value,chx:chx.value,ahr:ahr.value,towel:towel.value,poster:poster.value,bin:bin.value},
+ moments:[]
+ };
+ for(let i=0;i<5;i++) rec.moments.push(document.getElementById('m'+i).value);
+ let all=getAll(); all.push(rec); saveAll(all);
+ alert('บันทึกข้อมูลแล้ว');
+}
+
+function showReport(){
+ let all=getAll(); if(all.length==0){report.innerHTML='ยังไม่มีข้อมูล'; return}
+ let total=all.length*5;
+ let clean=0; let byRole={}; let hw=0; let hr=0;
+ all.forEach(r=>{
+  if(!byRole[r.role]) byRole[r.role]={t:0,c:0};
+  r.moments.forEach(m=>{
+   byRole[r.role].t++;
+   if(m=='HW'||m=='HR'){ clean++; byRole[r.role].c++; }
+   if(m=='HW') hw++; if(m=='HR') hr++;
+  });
+ });
+ let html=`<h2>📊 รายงานสรุป</h2>`;
+ html+=`<p>อัตราการทำความสะอาดมือรวม: <b>${(clean/total*100).toFixed(1)}%</b></p>`;
+ html+=`<p>HW ${(hw/(hw+hr)*100||0).toFixed(1)}% | HR ${(hr/(hw+hr)*100||0).toFixed(1)}%</p>`;
+ html+=`<h3>อัตราตามวิชาชีพ</h3><ul>`;
+ for(let r in byRole){ html+=`<li>${r}: ${(byRole[r].c/byRole[r].t*100).toFixed(1)}%</li>` }
+ html+='</ul>';
+ report.innerHTML=html;
+}
+
+function exportCSV(){
+ let all=getAll(); if(all.length==0){alert('ไม่มีข้อมูล');return}
+ let csv='ward,date,time,role,m1,m2,m3,m4,m5\n';
+ all.forEach(r=>{
+ csv+=`${r.ward},${r.date},${r.time},${r.role},${r.moments.join(',')}\n`;
+ });
+ let blob=new Blob([csv],{type:'text/csv'});
+ let a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+ a.download='hand_hygiene.csv'; a.click();
+}
+</script>
+</body>
+</html>
