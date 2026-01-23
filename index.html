@@ -45,7 +45,12 @@
         .chart-container { position: relative; width: 100%; }
         .chart-label { font-weight: bold; color: #34495e; margin-bottom: 15px; font-size: 1rem; }
 
-        @media print { .no-print { display: none !important; } .card { box-shadow: none; border: 1px solid #eee; } }
+        @media print { 
+            .no-print { display: none !important; } 
+            .card { box-shadow: none; border: 1px solid #eee; margin-bottom: 10px; }
+            body { background-color: white; }
+            .container-fluid { padding: 0 !important; }
+        }
     </style>
 </head>
 <body>
@@ -73,6 +78,12 @@
             <div id="rangeFilterGroupEnd" class="col-md-2" style="display:none;"><label class="small text-muted">ถึงวันที่</label><input type="date" id="filterEnd" class="form-control"></div>
             <div class="col-md-2">
                 <button class="btn btn-success w-100 fw-bold py-2 shadow-sm" onclick="updateReports()"><i class="fas fa-sync-alt"></i> อัปเดตข้อมูล</button>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary w-100 fw-bold py-2 shadow-sm" onclick="exportToExcel()"><i class="fas fa-file-excel"></i> Export Excel</button>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-danger w-100 fw-bold py-2 shadow-sm" onclick="window.print()"><i class="fas fa-file-pdf"></i> พิมพ์ PDF</button>
             </div>
         </div>
     </div>
@@ -218,6 +229,7 @@
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx58a1xS-6se0SXJ_pyfPsk7wIPZlz9I6OGcksrA3ohJ9hkHloZVTbdD9a27HpbGK8QbQ/exec"; 
     let database = [];
     let charts = {};
+    let currentFilteredData = [];
 
     window.onload = fetchDataFromSheet;
     function fetchDataFromSheet() { fetch(SCRIPT_URL).then(res => res.json()).then(data => { database = data; updateReports(); }); }
@@ -245,6 +257,7 @@
             if (start && end) filtered = database.filter(d => { const dD = d.obsDate.substring(0, 10); return dD >= start && dD <= end; });
         }
         if (filtered.length === 0) { alert("ไม่พบข้อมูล"); resetDashboard(); return; }
+        currentFilteredData = filtered;
         render(filtered);
     }
 
@@ -254,6 +267,58 @@
         for (let key in charts) { if (charts[key]) { charts[key].destroy(); charts[key] = null; } }
     }
 
+    // --- ฟังก์ชัน Export Excel (ข้อมูลดิบ + สรุปคำนวณ) ---
+    function exportToExcel() {
+        if (!currentFilteredData || currentFilteredData.length === 0) { alert("ไม่มีข้อมูลสำหรับการ Export"); return; }
+        
+        const wb = XLSX.utils.book_new();
+
+        // 1. ข้อมูลดิบ (Raw Data)
+        const rawSheetData = currentFilteredData.map(d => ({
+            "วันที่": d.obsDate,
+            "แผนก": d.dept,
+            "วิชาชีพ": d.role,
+            "M1": d.m[0] || "-", "M2": d.m[1] || "-", "M3": d.m[2] || "-", "M4": d.m[3] || "-", "M5": d.m[4] || "-",
+            "อ่างล้างมือ": d.equips[0], "สบู่เหลว": d.equips[1], "Chlorhexidine": d.equips[2], 
+            "Alcohol rub": d.equips[3], "กระดาษเช็ดมือ": d.equips[4], "โปสเตอร์": d.equips[5], "ถังขยะ": d.equips[6]
+        }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rawSheetData), "Raw_Data");
+
+        // 2. สรุปรายแผนก (Department Summary)
+        const depts = [...new Set(currentFilteredData.map(d => d.dept))].sort();
+        const deptSummary = depts.map(dept => {
+            const f = currentFilteredData.filter(d => d.dept === dept);
+            let s = {HW:0, HR:0, None:0, Glove:0};
+            f.forEach(d => { if(d.m) d.m.forEach(v => { if(v) s[v]++; }); });
+            const total = s.HW + s.HR + s.None + s.Glove;
+            return {
+                "แผนก": dept,
+                "HW+HR (%)": total > 0 ? ((s.HW + s.HR) / total * 100).toFixed(2) : "0.00",
+                "HW (ครั้ง)": s.HW, "HR (ครั้ง)": s.HR, "ไม่ล้างมือ (ครั้ง)": s.None, "สวมถุงมือ (ครั้ง)": s.Glove, "โอกาสทั้งหมด": total
+            };
+        });
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(deptSummary), "Dept_Summary");
+
+        // 3. ความพร้อมอุปกรณ์รายแผนก
+        const equipSummary = depts.map(dept => {
+            const f = currentFilteredData.filter(d => d.dept === dept);
+            const scores = Array(7).fill(0);
+            f.forEach(d => { if(d.equips) d.equips.forEach((v, i) => scores[i] += v); });
+            return {
+                "แผนก": dept,
+                "อ่างล้างมือ (%)": f.length > 0 ? (scores[0]/f.length*100).toFixed(2) : 0,
+                "สบู่เหลว (%)": f.length > 0 ? (scores[1]/f.length*100).toFixed(2) : 0,
+                "Chlorhexidine (%)": f.length > 0 ? (scores[2]/f.length*100).toFixed(2) : 0,
+                "Alcohol rub (%)": f.length > 0 ? (scores[3]/f.length*100).toFixed(2) : 0,
+                "ภาพรวมอุปกรณ์ (%)": f.length > 0 ? (scores.reduce((a,b)=>a+b,0)/(f.length*7)*100).toFixed(2) : 0
+            };
+        });
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(equipSummary), "Equipment_Summary");
+
+        XLSX.writeFile(wb, `IC_HandHygiene_Report_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+
+    // --- ส่วนงานแสดงผล (คงเดิม) ---
     function getPercentColor(pct) {
         let val = parseFloat(pct);
         if (val === 0 || isNaN(val)) return 'text-muted opacity-25'; 
@@ -279,13 +344,13 @@
         const totalOpp = hw + hr + none + glove; 
         const totalEquipPossible = data.length * 7;
         
-        document.getElementById('hw_val').innerText = ((hw / totalOpp) * 100).toFixed(1) + `%`;
+        document.getElementById('hw_val').innerText = totalOpp > 0 ? ((hw / totalOpp) * 100).toFixed(1) + `%` : '0%';
         document.getElementById('hw_frac').innerText = `(${hw}/${totalOpp})`;
-        document.getElementById('hr_val').innerText = ((hr / totalOpp) * 100).toFixed(1) + `%`;
+        document.getElementById('hr_val').innerText = totalOpp > 0 ? ((hr / totalOpp) * 100).toFixed(1) + `%` : '0%';
         document.getElementById('hr_frac').innerText = `(${hr}/${totalOpp})`;
-        document.getElementById('comp_val').innerText = (((hw + hr) / totalOpp) * 100).toFixed(1) + `%`;
+        document.getElementById('comp_val').innerText = totalOpp > 0 ? (((hw + hr) / totalOpp) * 100).toFixed(1) + `%` : '0%';
         document.getElementById('comp_frac').innerText = `(${hw + hr}/${totalOpp})`;
-        document.getElementById('equip_val').innerText = ((eqTotalRaw / totalEquipPossible) * 100).toFixed(1) + `%`;
+        document.getElementById('equip_val').innerText = totalEquipPossible > 0 ? ((eqTotalRaw / totalEquipPossible) * 100).toFixed(1) + `%` : '0%';
         document.getElementById('equip_frac').innerText = `(${eqTotalRaw}/${totalEquipPossible})`;
 
         drawPie(hw, hr, none, glove);
@@ -304,7 +369,6 @@
         const body = document.getElementById(bodyId);
         body.innerHTML = '';
         const keys = [...new Set(data.map(d => d[field]))].sort();
-
         keys.forEach(keyVal => {
             const filteredData = data.filter(d => d[field] === keyVal);
             let row = `<tr><td class="text-start ps-2 bg-label">${keyVal}</td>`;
@@ -314,9 +378,7 @@
                 const hrCount = filteredData.filter(d => d.m && d.m[mIdx] === 'HR').length;
                 const compCount = hwCount + hrCount;
                 const compPct = mTotal > 0 ? ((compCount / mTotal) * 100).toFixed(1) : 0;
-                row += `<td class="table-success">
-                            ${compCount > 0 ? `<span class="cell-pct ${getPercentColor(compPct)}">${compPct}%</span><span class="cell-frac">(${compCount}/${mTotal})</span>` : "-"}
-                        </td>`;
+                row += `<td class="table-success">${compCount > 0 ? `<span class="cell-pct ${getPercentColor(compPct)}">${compPct}%</span><span class="cell-frac">(${compCount}/${mTotal})</span>` : "-"}</td>`;
                 ['HW', 'HR', 'None', 'Glove'].forEach(beh => {
                     const count = filteredData.filter(d => d.m && d.m[mIdx] === beh).length;
                     if (mTotal > 0 && count > 0) {
@@ -325,29 +387,18 @@
                     } else { row += `<td>-</td>`; }
                 });
             }
-            row += `</tr>`;
-            body.innerHTML += row;
+            row += `</tr>`; body.innerHTML += row;
         });
     }
 
     function renderTables(data, mStats) {
-        const mBody = document.getElementById('momentTableBody'); 
-        mBody.innerHTML = '';
+        const mBody = document.getElementById('momentTableBody'); mBody.innerHTML = '';
         const momentLabels = ["ก่อนสัมผัสผู้ป่วย", "ก่อนทำหัตถการปลอดเชื้อ", "หลังสัมผัสสารคัดหลั่งผู้ป่วย", "หลังสัมผัสผู้ป่วย", "หลังสัมผัสสิ่งรอบตัวผู้ป่วย"];
         momentLabels.forEach((l, idx) => {
-            const m = mStats[idx];
-            const total = m.hw + m.hr + m.none + m.glove;
-            const fmt = (c) => { 
-                if (total === 0 || c === 0) return "-"; 
-                let pct = ((c/total)*100).toFixed(1); 
-                return `<span class="${getPercentColor(pct)}">${pct}%</span> <br><small class="text-muted">(${c}/${total})</small>`; 
-            };
+            const m = mStats[idx]; const total = m.hw + m.hr + m.none + m.glove;
+            const fmt = (c) => { if (total === 0 || c === 0) return "-"; let pct = ((c/total)*100).toFixed(1); return `<span class="${getPercentColor(pct)}">${pct}%</span> <br><small class="text-muted">(${c}/${total})</small>`; };
             const hwHrSum = m.hw + m.hr;
-            const fmtTotal = () => {
-                if (total === 0 || hwHrSum === 0) return "-";
-                let pct = ((hwHrSum / total) * 100).toFixed(1);
-                return `<span class="${getPercentColor(pct)}">${pct}%</span> <br><small class="text-muted">(${hwHrSum}/${total})</small>`;
-            };
+            const fmtTotal = () => { if (total === 0 || hwHrSum === 0) return "-"; let pct = ((hwHrSum / total) * 100).toFixed(1); return `<span class="${getPercentColor(pct)}">${pct}%</span> <br><small class="text-muted">(${hwHrSum}/${total})</small>`; };
             mBody.innerHTML += `<tr><td class="text-start fw-bold bg-light">${l}</td><td class="table-primary">${fmtTotal()}</td><td>${fmt(m.hw)}</td><td>${fmt(m.hr)}</td><td>${fmt(m.none)}</td><td>${fmt(m.glove)}</td></tr>`;
         });
         renderTableFraction(data, 'dept', 'deptTableBody');
@@ -358,34 +409,25 @@
         const body = document.getElementById(bodyId); body.innerHTML = '';
         const keys = [...new Set(data.map(d => d[field]))].sort();
         keys.forEach(k => {
-            let f = data.filter(d => d[field] === k);
-            let s = {HW:0, HR:0, None:0, Glove:0};
+            let f = data.filter(d => d[field] === k); let s = {HW:0, HR:0, None:0, Glove:0};
             f.forEach(d => { if(d.m) d.m.forEach(v => { if(v) s[v]++; }); });
             const total = s.HW + s.HR + s.None + s.Glove;
-            const fmt = (c) => { 
-                if (total === 0 || c === 0) return "-"; 
-                let pct = ((c/total)*100).toFixed(1); 
-                return `<span class="${getPercentColor(pct)}">${pct}%</span> <br><small class="text-muted">(${c}/${total})</small>`; 
-            };
-            const compSum = s.HW + s.HR;
-            const compPct = total > 0 ? ((compSum / total) * 100).toFixed(1) : 0;
+            const fmt = (c) => { if (total === 0 || c === 0) return "-"; let pct = ((c/total)*100).toFixed(1); return `<span class="${getPercentColor(pct)}">${pct}%</span> <br><small class="text-muted">(${c}/${total})</small>`; };
+            const compSum = s.HW + s.HR; const compPct = total > 0 ? ((compSum / total) * 100).toFixed(1) : 0;
             const compDisplay = compSum > 0 ? `<span class="${getPercentColor(compPct)} fw-bold">${compPct}%</span><br><small class="text-muted">(${compSum}/${total})</small>` : "-";
             body.innerHTML += `<tr><td class="text-start ps-2 fw-bold bg-light">${k}</td><td class="table-success">${compDisplay}</td><td>${fmt(s.HW)}</td><td>${fmt(s.HR)}</td><td>${fmt(s.None)}</td><td>${fmt(s.Glove)}</td></tr>`;
         });
     }
 
     function renderEquipDept(data) {
-        const body = document.getElementById('equipDeptTableBody');
-        body.innerHTML = '';
+        const body = document.getElementById('equipDeptTableBody'); body.innerHTML = '';
         const depts = [...new Set(data.map(d => d.dept))].sort();
         depts.forEach(dept => {
-            const f = data.filter(d => d.dept === dept);
-            let row = `<tr><td class="text-start ps-2 fw-bold bg-light">${dept}</td>`;
+            const f = data.filter(d => d.dept === dept); let row = `<tr><td class="text-start ps-2 fw-bold bg-light">${dept}</td>`;
             let deptSumScores = 0;
             for(let i=0; i<7; i++) {
                 let score = f.reduce((acc, d) => acc + (d.equips ? d.equips[i] : 0), 0);
-                deptSumScores += score;
-                let pct = f.length > 0 ? ((score / f.length) * 100).toFixed(1) : 0;
+                deptSumScores += score; let pct = f.length > 0 ? ((score / f.length) * 100).toFixed(1) : 0;
                 row += `<td>${score > 0 ? `<span class="${getPercentColor(pct)}">${pct}%<br><small class="text-muted">(${score}/${f.length})</small></span>` : "-"}</td>`;
             }
             let avg = (f.length > 0) ? ((deptSumScores / (f.length * 7)) * 100).toFixed(1) : 0;
@@ -394,12 +436,7 @@
         });
     }
 
-    // --- Chart functions (Modified Y-Axis) ---
-    const commonYAxis = { 
-        beginAtZero: true, 
-        max: 100, 
-        ticks: { stepSize: 20 } 
-    };
+    const commonYAxis = { beginAtZero: true, max: 100, ticks: { stepSize: 20 } };
 
     function drawPie(hw, hr, none, glove) { 
         if(charts.pie) charts.pie.destroy(); 
@@ -412,13 +449,9 @@
 
     function drawMomentBar(mStats) { 
         if(charts.moment) charts.moment.destroy(); 
-        const scores = mStats.map(m => {
-            const total = m.hw + m.hr + m.none + m.glove;
-            return total > 0 ? (((m.hw + m.hr) / total) * 100).toFixed(1) : 0;
-        });
+        const scores = mStats.map(m => { const total = m.hw + m.hr + m.none + m.glove; return total > 0 ? (((m.hw + m.hr) / total) * 100).toFixed(1) : 0; });
         charts.moment = new Chart(document.getElementById('momentChart'), { 
-            type: 'bar', 
-            data: { labels: ["M1 ก่อนสัมผัสผู้ป่วย", "M2 ก่อนทำหัตถการปลอดเชื้อ", "M3 หลังสัมผัสสารคัดหลั่งผู้ป่วย", "M4 หลังสัมผัสผู้ป่วย", "M5 หลังสัมผัสสิ่งรอบตัวผู้ป่วย"], datasets: [{ label: 'HW+HR (%)', data: scores, backgroundColor: '#16a085', borderRadius: 8 }] }, 
+            type: 'bar', data: { labels: ["M1", "M2", "M3", "M4", "M5"], datasets: [{ label: 'HW+HR (%)', data: scores, backgroundColor: '#16a085', borderRadius: 8 }] }, 
             options: { maintainAspectRatio: false, scales: { y: commonYAxis } } 
         }); 
     }
@@ -426,58 +459,26 @@
     function drawTrend(data) {
         if(charts.trend) charts.trend.destroy();
         const monthlyData = {};
-        database.forEach(d => {
-            if(!d.obsDate) return;
-            const month = d.obsDate.substring(0, 7);
-            if(!monthlyData[month]) monthlyData[month] = { pass: 0, total: 0 };
-            if(d.m) d.m.forEach(v => { if(v){ monthlyData[month].total++; if(v === 'HW' || v === 'HR') monthlyData[month].pass++; } });
-        });
+        database.forEach(d => { if(!d.obsDate) return; const month = d.obsDate.substring(0, 7); if(!monthlyData[month]) monthlyData[month] = { pass: 0, total: 0 }; if(d.m) d.m.forEach(v => { if(v){ monthlyData[month].total++; if(v === 'HW' || v === 'HR') monthlyData[month].pass++; } }); });
         const labels = Object.keys(monthlyData).sort();
         charts.trend = new Chart(document.getElementById('trendChart'), { 
-            type: 'line', 
-            data: { labels: labels, datasets: [{ label: 'Trend (%)', data: labels.map(l => ((monthlyData[l].pass / monthlyData[l].total) * 100).toFixed(1)), borderColor: '#16a085', tension: 0.4, fill: true, backgroundColor: 'rgba(22, 160, 133, 0.1)' }] }, 
+            type: 'line', data: { labels: labels, datasets: [{ label: 'Trend (%)', data: labels.map(l => ((monthlyData[l].pass / monthlyData[l].total) * 100).toFixed(1)), borderColor: '#16a085', tension: 0.4, fill: true, backgroundColor: 'rgba(22, 160, 133, 0.1)' }] }, 
             options: { maintainAspectRatio: false, scales: { y: commonYAxis } } 
         });
     }
 
     function drawDeptMomentChart(data) {
         if(charts.deptMoment) charts.deptMoment.destroy();
-        const depts = [...new Set(data.map(d => d.dept))].sort();
-        const colors = ['#1abc9c', '#3498db', '#9b59b6', '#f1c40f', '#e67e22'];
-        const datasets = [0, 1, 2, 3, 4].map(mIdx => ({
-            label: `M${mIdx+1}`,
-            data: depts.map(dept => {
-                const f = data.filter(d => d.dept === dept);
-                const total = f.filter(d => d.m && d.m[mIdx] && d.m[mIdx] !== "").length;
-                const comp = f.filter(d => d.m && (d.m[mIdx] === 'HW' || d.m[mIdx] === 'HR')).length;
-                return total > 0 ? ((comp / total) * 100).toFixed(1) : 0;
-            }),
-            backgroundColor: colors[mIdx], borderRadius: 4
-        }));
-        charts.deptMoment = new Chart(document.getElementById('deptMomentChart'), {
-            type: 'bar', data: { labels: depts, datasets: datasets },
-            options: { maintainAspectRatio: false, scales: { y: commonYAxis } }
-        });
+        const depts = [...new Set(data.map(d => d.dept))].sort(); const colors = ['#1abc9c', '#3498db', '#9b59b6', '#f1c40f', '#e67e22'];
+        const datasets = [0, 1, 2, 3, 4].map(mIdx => ({ label: `M${mIdx+1}`, data: depts.map(dept => { const f = data.filter(d => d.dept === dept); const total = f.filter(d => d.m && d.m[mIdx] && d.m[mIdx] !== "").length; const comp = f.filter(d => d.m && (d.m[mIdx] === 'HW' || d.m[mIdx] === 'HR')).length; return total > 0 ? ((comp / total) * 100).toFixed(1) : 0; }), backgroundColor: colors[mIdx], borderRadius: 4 }));
+        charts.deptMoment = new Chart(document.getElementById('deptMomentChart'), { type: 'bar', data: { labels: depts, datasets: datasets }, options: { maintainAspectRatio: false, scales: { y: commonYAxis } } });
     }
 
     function drawRoleMomentChart(data) {
         if(charts.roleMoment) charts.roleMoment.destroy();
-        const roles = [...new Set(data.map(d => d.role))].sort();
-        const colors = ['#1abc9c', '#3498db', '#9b59b6', '#f1c40f', '#e67e22'];
-        const datasets = [0, 1, 2, 3, 4].map(mIdx => ({
-            label: `M${mIdx+1}`,
-            data: roles.map(role => {
-                const f = data.filter(d => d.role === role);
-                const total = f.filter(d => d.m && d.m[mIdx] && d.m[mIdx] !== "").length;
-                const comp = f.filter(d => d.m && (d.m[mIdx] === 'HW' || d.m[mIdx] === 'HR')).length;
-                return total > 0 ? ((comp / total) * 100).toFixed(1) : 0;
-            }),
-            backgroundColor: colors[mIdx], borderRadius: 4
-        }));
-        charts.roleMoment = new Chart(document.getElementById('roleMomentChart'), {
-            type: 'bar', data: { labels: roles, datasets: datasets },
-            options: { maintainAspectRatio: false, scales: { y: commonYAxis } }
-        });
+        const roles = [...new Set(data.map(d => d.role))].sort(); const colors = ['#1abc9c', '#3498db', '#9b59b6', '#f1c40f', '#e67e22'];
+        const datasets = [0, 1, 2, 3, 4].map(mIdx => ({ label: `M${mIdx+1}`, data: roles.map(role => { const f = data.filter(d => d.role === role); const total = f.filter(d => d.m && d.m[mIdx] && d.m[mIdx] !== "").length; const comp = f.filter(d => d.m && (d.m[mIdx] === 'HW' || d.m[mIdx] === 'HR')).length; return total > 0 ? ((comp / total) * 100).toFixed(1) : 0; }), backgroundColor: colors[mIdx], borderRadius: 4 }));
+        charts.roleMoment = new Chart(document.getElementById('roleMomentChart'), { type: 'bar', data: { labels: roles, datasets: datasets }, options: { maintainAspectRatio: false, scales: { y: commonYAxis } } });
     }
 </script>
 </body>
