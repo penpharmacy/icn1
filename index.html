@@ -89,9 +89,9 @@
     </div>
 
     <div class="row g-4 mb-4">
-        <div class="col-md-3"><div class="dash-card"><div class="dash-title">Hand Wash Overall</div><div class="dash-value text-primary" id="hw_val">0%</div><div class="dash-fraction" id="hw_frac">(0/0)</div></div></div>
-        <div class="col-md-3"><div class="dash-card"><div class="dash-title">Hand Rub Overall</div><div class="dash-value text-info" id="hr_val">0%</div><div class="dash-fraction" id="hr_frac">(0/0)</div></div></div>
-        <div class="col-md-3"><div class="dash-card" style="border-bottom-color: #27ae60;"><div class="dash-title">HW+HR Overall</div><div class="dash-value text-success" id="comp_val">0%</div><div class="dash-fraction" id="comp_frac">(0/0)</div></div></div>
+        <div class="col-md-3"><div class="dash-card"><div class="dash-title">สัดส่วนทำความสะอาดมือด้วยน้ำสบู่</div><div class="dash-value text-primary" id="hw_val">0%</div><div class="dash-fraction" id="hw_frac">(0/0)</div></div></div>
+        <div class="col-md-3"><div class="dash-card"><div class="dash-title">สัดส่วนทำความสะอาดมือด้วยHR</div><div class="dash-value text-info" id="hr_val">0%</div><div class="dash-fraction" id="hr_frac">(0/0)</div></div></div>
+        <div class="col-md-3"><div class="dash-card" style="border-bottom-color: #27ae60;"><div class="dash-title">อัตราการทำความสะอาดมือภาพรวม</div><div class="dash-value text-success" id="comp_val">0%</div><div class="dash-fraction" id="comp_frac">(0/0)</div></div></div>
         <div class="col-md-3"><div class="dash-card" style="border-bottom-color: #f39c12;"><div class="dash-title">ภาพรวมความพร้อมอุปกรณ์</div><div class="dash-value text-warning" id="equip_val">0%</div><div class="dash-fraction" id="equip_frac">(0/0)</div></div></div>
     </div>
 
@@ -136,7 +136,7 @@
 
         <div class="card mt-4">
             <div class="bg-dark p-3 d-flex justify-content-between align-items-center">
-                <h6 class="text-white mb-0 small">อัตราทำความสะอาดมือ แยกตาม Moments และแผนก</h6>
+                <h6 class="text-white mb-0 small">อัตราทำความสะอาดมือแต่ละโอกาส แยกตาม Moments และแผนก</h6>
                 <span class="badge bg-secondary">Matrix View</span>
             </div>
             <div class="table-responsive">
@@ -164,7 +164,7 @@
         </div>
 
         <div class="card mt-4">
-            <div class="bg-dark p-3"><h6 class="text-white mb-0 small">อัตราทำความสะอาดมือ แยกตาม Moments และวิชาชีพ</h6></div>
+            <div class="bg-dark p-3"><h6 class="text-white mb-0 small">อัตราทำความสะอาดมือแต่ละโอกาส แยกตาม Moments และวิชาชีพ</h6></div>
             <div class="table-responsive">
                 <table class="table table-bordered text-center align-middle table-matrix table-hover mb-0" style="min-width:1500px;">
                     <thead>
@@ -205,7 +205,7 @@
         <div class="row g-4 mt-2 mb-5">
             <div class="col-md-6">
                 <div class="card h-100 overflow-hidden">
-                    <div class="p-3 bg-light border-bottom fw-bold">ภาพรวมความร่วมมือแยกตามแผนก</div>
+                    <div class="p-3 bg-light border-bottom fw-bold">ภาพรวมการทำความสะอาดมือแยกตามแผนก</div>
                     <table class="table table-hover text-center mb-0">
                         <thead><tr><th>แผนก</th><th class="head-comp">HW+HR</th><th>HW</th><th>HR</th><th>ไม่ล้างมือ</th><th>สวมถุงมือ</th></tr></thead>
                         <tbody id="deptTableBody"></tbody>
@@ -214,7 +214,7 @@
             </div>
             <div class="col-md-6">
                 <div class="card h-100 overflow-hidden">
-                    <div class="p-3 bg-light border-bottom fw-bold">ภาพรวมความร่วมมือแยกตามวิชาชีพ</div>
+                    <div class="p-3 bg-light border-bottom fw-bold">ภาพรวมการทำความสะอาดมือแยกตามวิชาชีพ</div>
                     <table class="table table-hover text-center mb-0">
                         <thead><tr><th>วิชาชีพ</th><th class="head-comp">HW+HR</th><th>HW</th><th>HR</th><th>ไม่ล้างมือ</th><th>สวมถุงมือ</th></tr></thead>
                         <tbody id="roleTableBody"></tbody>
