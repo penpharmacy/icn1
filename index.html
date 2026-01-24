@@ -267,13 +267,11 @@
         for (let key in charts) { if (charts[key]) { charts[key].destroy(); charts[key] = null; } }
     }
 
-    // --- ฟังก์ชัน Export Excel (ข้อมูลดิบ + สรุปคำนวณ) ---
     function exportToExcel() {
         if (!currentFilteredData || currentFilteredData.length === 0) { alert("ไม่มีข้อมูลสำหรับการ Export"); return; }
         
         const wb = XLSX.utils.book_new();
 
-        // 1. ข้อมูลดิบ (Raw Data)
         const rawSheetData = currentFilteredData.map(d => ({
             "วันที่": d.obsDate,
             "แผนก": d.dept,
@@ -284,7 +282,6 @@
         }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rawSheetData), "Raw_Data");
 
-        // 2. สรุปรายแผนก (Department Summary)
         const depts = [...new Set(currentFilteredData.map(d => d.dept))].sort();
         const deptSummary = depts.map(dept => {
             const f = currentFilteredData.filter(d => d.dept === dept);
@@ -299,7 +296,6 @@
         });
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(deptSummary), "Dept_Summary");
 
-        // 3. ความพร้อมอุปกรณ์รายแผนก
         const equipSummary = depts.map(dept => {
             const f = currentFilteredData.filter(d => d.dept === dept);
             const scores = Array(7).fill(0);
@@ -318,7 +314,6 @@
         XLSX.writeFile(wb, `IC_HandHygiene_Report_${new Date().toISOString().slice(0,10)}.xlsx`);
     }
 
-    // --- ส่วนงานแสดงผล (คงเดิม) ---
     function getPercentColor(pct) {
         let val = parseFloat(pct);
         if (val === 0 || isNaN(val)) return 'text-muted opacity-25'; 
@@ -341,17 +336,26 @@
             if(d.equips) d.equips.forEach(v => eqTotalRaw += v);
         });
 
-        const totalOpp = hw + hr + none + glove; 
+        // --- ส่วนที่ปรับปรุงสูตรคำนวณ Dashboard ---
+        const totalCleaned = hw + hr; // ตัวหารใหม่: จำนวนครั้งที่มีการปฏิบัติจริง (HW + HR)
+        const totalOpp = hw + hr + none + glove; // โอกาสทั้งหมด (ใช้สำหรับภาพรวม Compliance)
         const totalEquipPossible = data.length * 7;
         
-        document.getElementById('hw_val').innerText = totalOpp > 0 ? ((hw / totalOpp) * 100).toFixed(1) + `%` : '0%';
-        document.getElementById('hw_frac').innerText = `(${hw}/${totalOpp})`;
-        document.getElementById('hr_val').innerText = totalOpp > 0 ? ((hr / totalOpp) * 100).toFixed(1) + `%` : '0%';
-        document.getElementById('hr_frac').innerText = `(${hr}/${totalOpp})`;
-        document.getElementById('comp_val').innerText = totalOpp > 0 ? (((hw + hr) / totalOpp) * 100).toFixed(1) + `%` : '0%';
-        document.getElementById('comp_frac').innerText = `(${hw + hr}/${totalOpp})`;
+        // Hand Wash Overall (หารด้วยจำนวนที่ล้างจริง)
+        document.getElementById('hw_val').innerText = totalCleaned > 0 ? ((hw / totalCleaned) * 100).toFixed(1) + `%` : '0%';
+        document.getElementById('hw_frac').innerText = `(${hw}/${totalCleaned})`;
+        
+        // Hand Rub Overall (หารด้วยจำนวนที่ล้างจริง)
+        document.getElementById('hr_val').innerText = totalCleaned > 0 ? ((hr / totalCleaned) * 100).toFixed(1) + `%` : '0%';
+        document.getElementById('hr_frac').innerText = `(${hr}/${totalCleaned})`;
+        
+        // HW+HR Overall (Compliance ยังคงใช้ตัวหารโอกาสทั้งหมด)
+        document.getElementById('comp_val').innerText = totalOpp > 0 ? ((totalCleaned / totalOpp) * 100).toFixed(1) + `%` : '0%';
+        document.getElementById('comp_frac').innerText = `(${totalCleaned}/${totalOpp})`;
+        
         document.getElementById('equip_val').innerText = totalEquipPossible > 0 ? ((eqTotalRaw / totalEquipPossible) * 100).toFixed(1) + `%` : '0%';
         document.getElementById('equip_frac').innerText = `(${eqTotalRaw}/${totalEquipPossible})`;
+        // ---------------------------------------
 
         drawPie(hw, hr, none, glove);
         drawMomentBar(mStats);
