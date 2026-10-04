@@ -232,6 +232,18 @@
 
 <script>
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx58a1xS-6se0SXJ_pyfPsk7wIPZlz9I6OGcksrA3ohJ9hkHloZVTbdD9a27HpbGK8QbQ/exec"; 
+     // ลิงก์ Google Sheet ที่เก็บข้อมูลล้างมือ
+    const SHEET_URL = "https://docs.google.com/spreadsheets/d/1b3iredqZaMBr2oHbwlBm91rynx-mMx76vlZpLiaE43c/edit?gid=0#gid=0";
+
+    function openSheet(e) {
+        if (!SHEET_URL) {
+            e.preventDefault();
+            alert("ยังไม่ได้ตั้งค่าลิงก์ Google Sheet");
+            return false;
+        }
+        document.getElementById('btnOpenSheet').href = SHEET_URL;
+        return true;
+    }
     let database = [];
     let charts = {};
     let currentFilteredData = [];
